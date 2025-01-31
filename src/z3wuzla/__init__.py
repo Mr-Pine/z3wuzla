@@ -37,11 +37,6 @@ def get_func(idx):
     return get_funcs()[idx]
 
 
-def get_arity(_ctx, func):
-    if not func.sort().is_fun():
-        return 0
-    return len(func.sort().fun_domain())
-
 
 def get_item(self, idx):
     if isinstance(idx, int):
@@ -56,8 +51,12 @@ def get_item(self, idx):
         return ref
     elif isinstance(idx, z3.FuncDeclRef):
         return self.get_interp(idx)
+    elif isinstance(idx, z3.z3.BoolRef):
+        bool_terms = [term for term in get_consts() if term.sort().is_bool()]
+        name = z3.z3printer._op_name(idx)
+        return z3.BoolRef([term for term in bool_terms if term.symbol() == name][0])
     else:
-        raise Exception("Unsupported index")
+        raise Exception(f"Unsupported index {type(idx)}")
 
 
 def wuzl_model(self: z3.Solver):
@@ -110,6 +109,18 @@ def inc_ref(ctx_ref, ref):
 
 z3.z3.Z3_inc_ref = inc_ref
 
+old_dec_ref = z3.z3.Z3_dec_ref
+
+
+def dec_ref(ctx_ref, ref):
+    if isinstance(ref, bitwuzla.Term):
+        return
+    else:
+        return old_dec_ref(ctx_ref, ref)
+
+
+z3.z3.Z3_dec_ref = dec_ref
+
 old_func_decl_as_ast = z3.z3.FuncDeclRef.as_ast
 
 
@@ -121,6 +132,15 @@ def new_as_ast(self):
 
 
 z3.z3.FuncDeclRef.as_ast = new_as_ast
+
+old_get_arity = z3.z3.Z3_get_arity
+def get_arity(_ctx, func):
+    if not isinstance(func, bitwuzla.Term):
+        return old_get_arity(_ctx, func)
+    print(func)
+    if not func.sort().is_fun():
+        return 0
+    return len(func.sort().fun_domain())
 z3.z3.Z3_get_arity = get_arity
 
 z3.z3.Z3_model_get_func_interp = extract_lambda.__get__(parser)
@@ -139,3 +159,38 @@ def new_op_name(expr):
 
 
 z3.z3printer._op_name = new_op_name
+
+
+old_is_app = z3.z3.is_app
+def new_is_app(expr):
+    if isinstance(expr.as_ast(), bitwuzla.Term):
+        return expr.as_ast().kind() not in [bitwuzla.Kind.VALUE, bitwuzla.Kind.VARIABLE]
+    return old_is_app(expr)
+z3.z3.is_app = new_is_app
+
+old_get_app_num_args = z3.z3.Z3_get_app_num_args
+def new_get_app_num_args(_ctx, expr):
+    if isinstance(expr, bitwuzla.Term):
+        return get_arity(_ctx, expr)
+    return old_get_app_num_args(_ctx, expr)
+z3.z3.Z3_get_app_num_args = new_get_app_num_args
+
+
+old_get_app_decl = z3.z3.Z3_get_app_decl
+def new_get_app_decl(_ctx, expr):
+    if isinstance(expr, bitwuzla.Term):
+        return expr
+    return old_get_app_decl(_ctx, expr)
+z3.z3.Z3_get_app_decl = new_get_app_decl
+
+old_get_decl_kind = z3.z3.Z3_get_decl_kind
+def new_get_decl_kind(_ctx, expr):
+    if (isinstance(expr, bitwuzla.Term)):
+        if expr.kind() == bitwuzla.Kind.CONSTANT:
+            expr = parser.bitwuzla().get_value(expr)
+        if expr.kind() == bitwuzla.Kind.VALUE:
+            if expr.sort().is_bool():
+                return z3.Z3_OP_TRUE if expr.is_true() else z3.Z3_OP_FALSE
+        raise Exception("Unknown bitwuzla kind")
+    return old_get_decl_kind(_ctx, expr)
+z3.z3.Z3_get_decl_kind = new_get_decl_kind

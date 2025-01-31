@@ -3,7 +3,13 @@ import z3
 from .nops import nop2
 from .values import bitwuzla_to_z3
 
-def extract_lambda(parser: bitwuzla.Parser, _1, _2, term_decl):
+def extract_lambda(parser: bitwuzla.Parser, ctx_ref, _2, term_decl):
+    if not isinstance(term_decl, bitwuzla.Term):
+        function_name = z3.z3printer._op_name(z3.FuncDeclRef(term_decl))
+        functions = [term for term in parser.get_declared_funs() if term.sort().is_fun() if term.symbol() == function_name]
+        assert len(functions) == 1
+        term_decl = functions[0]
+
     term = parser.bitwuzla().get_value(term_decl)
     parameters = []
     while term.kind() == bitwuzla.Kind.LAMBDA:
