@@ -1,5 +1,8 @@
 import z3
 import bitwuzla
+from .function import extract_lambda
+from .nops import nop1, nop2
+
 print("Hello from z3wuzla!")
 
 tm = bitwuzla.TermManager()
@@ -7,13 +10,6 @@ options = bitwuzla.Options()
 options.set(bitwuzla.Option.PRODUCE_MODELS, True)
 parser = bitwuzla.Parser(tm, options)
 
-
-def nop():
-    pass
-def nop1(a):
-    pass
-def nop2(a, b):
-    pass
 
 def get_num_consts(_ctx, _model):
     return len([term for term in parser.get_declared_funs() if term.is_const()])
@@ -27,6 +23,10 @@ def get_func(idx):
     res = [term for term in parser.get_declared_funs() if not term.is_const()][idx]
     return res
 
+def get_arity(_ctx, func):
+    return len(func.sort().fun_domain())
+
+
 def get_item(self, idx):
     if isinstance(idx, int):
         if idx >= len(self):
@@ -38,6 +38,8 @@ def get_item(self, idx):
             ref = z3.FuncDeclRef(get_func(idx - num_consts), self.ctx)
         ref.as_ast = nop1.__get__(ref)
         return ref
+    elif isinstance(idx, z3.FuncDeclRef):
+        return self.get_interp(idx)
     else:
         raise "Unsupported index"
 
@@ -91,3 +93,16 @@ def new_as_ast(self):
     else:
         return old_func_decl_as_ast(self)
 z3.z3.FuncDeclRef.as_ast = new_as_ast
+z3.z3.Z3_get_arity = get_arity
+
+z3.z3.Z3_model_get_func_interp = extract_lambda.__get__(parser)
+
+old_op_name = z3.z3printer._op_name
+def new_op_name(expr):
+    if isinstance(expr, bitwuzla.Term):
+        return expr.symbol()
+    elif hasattr(expr, "ast") and isinstance(expr.ast, bitwuzla.Term):
+        return expr.ast.symbol()
+    else:
+        return old_op_name(expr)
+z3.z3printer._op_name = new_op_name
