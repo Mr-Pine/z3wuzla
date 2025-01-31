@@ -19,5 +19,9 @@ z3wuzla = "z3wuzla:main"
 requires = ["hatchling"]
 build-backend = "hatchling.build"
 
+[tool.pyright]
+venvPath = "."
+venv = ".venv"
+
 [tool.uv.sources]
 bitwuzla = { path = "../../ctf/tools/bitwuzla" }
